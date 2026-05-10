@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -657,86 +657,239 @@ function compressImage(file){
   });
 }
 
-// =============== EXPORT EXCEL ===============
-function exportExcel(){
+// =============== EXPORT EXCEL (ExcelJS) ===============
+async function exportExcel(){
   const ents = getEntriesForMonth(currentMonth);
   if(ents.length===0){toast('Tidak ada entry bulan ini','err');return}
-  const aoa = [];
-  aoa.push(['PERMOHONAN PEMBAYARAN','','','']);
-  aoa.push(['','Pengajuan DANA ADVANCE','','']);
-  aoa.push(['','Penyelesaian dana ADVANCE yang diterima','','']);
-  aoa.push(['','REIMBURSE ( klaim ) Lampirkan BON Asli','','']);
-  aoa.push(['Tanggal','Untuk Pembiayaan','Jumlah','Keterangan']);
+  toast('Membuat Excel...','ok');
 
-  const merges = [{s:{r:0,c:0},e:{r:0,c:3}}];
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Permohonan',{views:[{showGridLines:false}]});
 
+  // Column widths
+  ws.getColumn(1).width = 14;
+  ws.getColumn(2).width = 36;
+  ws.getColumn(3).width = 12;
+  ws.getColumn(4).width = 50;
+
+  const thin = {style:'thin',color:{argb:'FF000000'}};
+  const allB = {top:thin,left:thin,bottom:thin,right:thin};
+
+  function styleCell(addr, opts){
+    const c = ws.getCell(addr);
+    if(opts.value!==undefined) c.value = opts.value;
+    const font = {name:'Calibri', size:opts.size||11};
+    if(opts.bold) font.bold = true;
+    if(opts.color) font.color = {argb:opts.color};
+    c.font = font;
+    const align = {vertical:'middle'};
+    if(opts.center) align.horizontal = 'center';
+    else if(opts.right) align.horizontal = 'right';
+    else if(opts.left) align.horizontal = 'left';
+    if(opts.wrap) align.wrapText = true;
+    c.alignment = align;
+    if(opts.border) c.border = allB;
+    if(opts.numFmt) c.numFmt = opts.numFmt;
+    return c;
+  }
+  function bordEmpty(row, cols=[1,2,3,4]){
+    cols.forEach(col=>{
+      const addr = ws.getRow(row).getCell(col).address;
+      ws.getCell(addr).border = allB;
+    });
+  }
+
+  let r = 1;
+
+  // Title (merged A1:D1)
+  ws.mergeCells(`A${r}:D${r}`);
+  styleCell(`A${r}`, {value:'PERMOHONAN PEMBAYARAN', bold:true, center:true, border:true, size:11});
+  ws.getRow(r).height = 22;
+  r++;
+
+  // Rows 2-4: a/b/c options
+  const opts = [
+    ['a','Pengajuan DANA ADVANCE'],
+    ['b','Penyelesaian dana ADVANCE yang diterima'],
+    ['c','REIMBURSE ( klaim ) Lampirkan BON Asli']
+  ];
+  opts.forEach(([letter, text])=>{
+    styleCell(`A${r}`, {value:letter, center:true, border:true});
+    styleCell(`B${r}`, {value:text, left:true, border:true});
+    styleCell(`C${r}`, {border:true});
+    styleCell(`D${r}`, {border:true});
+    r++;
+  });
+
+  // Header row (Tanggal | Untuk Pembiayaan | Jumlah | Keterangan)
+  styleCell(`A${r}`, {value:'Tanggal', bold:true, center:true, border:true});
+  styleCell(`B${r}`, {value:'Untuk Pembiayaan', bold:true, center:true, border:true});
+  styleCell(`C${r}`, {value:'Jumlah', bold:true, center:true, border:true});
+  styleCell(`D${r}`, {value:'Keterangan', bold:true, center:true, border:true});
+  ws.getRow(r).height = 18;
+  r++;
+
+  // Data rows
   ents.forEach(e=>{
-    aoa.push(['','','','']);
+    // Empty separator row (with borders)
+    bordEmpty(r);
+    r++;
+
     const itemRows = [];
     const allowanceLabel = `Allowance ${e.namaTrip || (e.tujuan?.[0]?.tempat?.replace(/^RS[ID]?\s+/,'')||'')}`.trim();
     itemRows.push({item:allowanceLabel, jumlah:getAllowance(e)});
     (e.biayaLain||[]).forEach(b=>itemRows.push({item:b.nama, jumlah:+b.jumlah||0}));
+
     const ketRows = [];
     (e.tujuan||[]).forEach(t=>{
       if(t.tempat)ketRows.push({text:t.tempat,bold:true});
       (t.aktivitas||[]).forEach(a=>{if(a)ketRows.push({text:a,bold:false})});
     });
+
     const dateLabel = formatDateExcel(e);
     const durLabel = formatDurasi(e);
     const maxR = Math.max(itemRows.length, ketRows.length, 1);
+
     for(let i=0;i<maxR;i++){
-      const tgl = i===0?dateLabel : (i===1?durLabel:'');
+      const tgl = i===0 ? dateLabel : (i===1 ? durLabel : '');
       const it = itemRows[i] || {item:'',jumlah:''};
       const ket = ketRows[i] || {text:'',bold:false};
-      aoa.push([tgl, it.item, it.jumlah===''?'':+it.jumlah||0, ket.text]);
+
+      styleCell(`A${r}`, {value:tgl, center:true, border:true});
+      styleCell(`B${r}`, {value:it.item, left:true, border:true});
+      if(it.jumlah===''){
+        styleCell(`C${r}`, {border:true});
+      }else{
+        styleCell(`C${r}`, {value:+it.jumlah||0, right:true, border:true, numFmt:'#,##0'});
+      }
+      styleCell(`D${r}`, {value:ket.text, left:true, bold:ket.bold, border:true, wrap:true});
+      r++;
     }
   });
 
-  const total = ents.reduce((s,e)=>s+entryTotal(e),0);
-  aoa.push([]);
-  aoa.push(['','Total', total,'']);
-  aoa.push([]);
-  aoa.push(['Pengajuan','', +(state.pengajuanPerBulan[currentMonth]||0),'']);
-  aoa.push(['Realisasi','', total,'']);
-  const sel = (+(state.pengajuanPerBulan[currentMonth]||0)) - total;
-  aoa.push([sel>=0?'Kelebihan':'Kurang','', sel,'']);
-  aoa.push([]);
-  aoa.push(['Dibuat oleh,','','Mengetahui,','Menyetujui,']);
-  aoa.push([]);aoa.push([]);aoa.push([]);
-  aoa.push([`(${state.meta.nama||'.................'})`,'','(.................)','(.................)']);
-  aoa.push([]);
-  aoa.push(['Allowance untuk perjalanan up Country','','','']);
-  aoa.push([]);
-  aoa.push(['Perjalanan tidak menginap','','Rp. 125.000/hari','']);
-  aoa.push(['Perjalanan menginap utk Sales & Teknisi','','Rp. 300.000/hari','']);
-  aoa.push(['Perjalanan menginap utk Supervisor','','Rp. 350.000/hari','']);
-  aoa.push(['Perjalanan menginap utk Manager','','Rp. 500.000/hari','']);
-  aoa.push([]);
-  aoa.push(['Allowance perjalanan tidak termasuk biaya tiket pesawat dan kendaraan umum (dan taxi dalam kota)','','','']);
-  aoa.push(['Pengajuan untuk allowance ini harap dikirimkan ke Keuangan 2 (dua) hari sebelum keberangkatan','','','']);
+  // Empty separator
+  bordEmpty(r);
+  r++;
 
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = [{wch:20},{wch:38},{wch:14},{wch:42}];
-  ws['!merges'] = merges;
-  for(const a in ws){
-    if(a.startsWith('!'))continue;
-    const c = ws[a];
-    if(typeof c.v==='number'){c.t='n';c.z='#,##0'}
-  }
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Permohonan');
-  XLSX.writeFile(wb, `Permohonan_${monthLabelID(currentMonth).replace(/\s+/g,'_')}.xlsx`);
+  // Total row
+  const total = ents.reduce((s,e)=>s+entryTotal(e),0);
+  styleCell(`A${r}`, {border:true});
+  styleCell(`B${r}`, {value:'Total', bold:true, center:true, border:true});
+  styleCell(`C${r}`, {value:total, bold:true, right:true, border:true, numFmt:'#,##0'});
+  styleCell(`D${r}`, {border:true});
+  r++;
+
+  // Final empty bordered row
+  bordEmpty(r);
+  r++;
+
+  // Skip 1 row
+  r++;
+
+  // Pengajuan / Realisasi / Kelebihan (NO borders below)
+  const peng = +(state.pengajuanPerBulan[currentMonth]||0);
+  styleCell(`A${r}`, {value:'Pengajuan', left:true});
+  styleCell(`C${r}`, {value:peng, right:true, numFmt:'#,##0'});
+  r++;
+  styleCell(`A${r}`, {value:'Realisasi', left:true});
+  styleCell(`C${r}`, {value:total, right:true, numFmt:'#,##0'});
+  r++;
+  const sel = peng - total;
+  styleCell(`A${r}`, {value:sel>=0?'Kelebihan':'Kurang', left:true});
+  styleCell(`C${r}`, {value:sel, bold:true, color:'FFFF0000', right:true, numFmt:'#,##0'});
+  r++;
+
+  // Skip 2 rows
+  r += 2;
+
+  // Signature header row
+  styleCell(`A${r}`, {value:'Dibuat oleh,', left:true});
+  styleCell(`C${r}`, {value:'Mengetahui,', left:true});
+  styleCell(`D${r}`, {value:'Menyetujui,', left:true});
+  r += 5; // space for signature
+
+  styleCell(`A${r}`, {value:`(${state.meta.nama||'.................'})`, left:true});
+  styleCell(`C${r}`, {value:'(.................)', left:true});
+  styleCell(`D${r}`, {value:'(.................)', left:true});
+  r += 2;
+
+  // Footer info
+  styleCell(`A${r}`, {value:'Allowance untuk perjalanan up Country', left:true});
+  r += 2;
+  const footer = [
+    ['Perjalanan tidak menginap','Rp. 125.000/hari'],
+    ['Perjalanan menginap utk Sales & Teknisi','Rp. 300.000/hari'],
+    ['Perjalanan menginap utk Supervisor','Rp. 350.000/hari'],
+    ['Perjalanan menginap utk Manager','Rp. 500.000/hari']
+  ];
+  footer.forEach(([a,c])=>{
+    styleCell(`A${r}`, {value:a, left:true});
+    styleCell(`C${r}`, {value:c, left:true});
+    r++;
+  });
+  r++;
+  styleCell(`A${r}`, {value:'Allowance perjalanan tidak termasuk biaya tiket pesawat dan kendaraan umum (dan taxi dalam kota)', left:true});
+  r++;
+  styleCell(`A${r}`, {value:'Pengajuan untuk allowance ini harap dikirimkan ke Keuangan 2 (dua) hari sebelum keberangkatan', left:true});
+
+  // Page setup
+  ws.pageSetup = {
+    paperSize:9, // A4
+    orientation:'landscape',
+    fitToPage:true, fitToWidth:1, fitToHeight:0,
+    margins:{left:0.4,right:0.4,top:0.5,bottom:0.5,header:0.3,footer:0.3}
+  };
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  downloadBlob(blob, `Permohonan_${monthLabelID(currentMonth).replace(/\s+/g,'_')}.xlsx`);
   toast('Excel di-download','ok');
 }
 
 // =============== EXPORT WORD ===============
 async function exportDocx(){
   const ents = getEntriesForMonth(currentMonth);
-  const allPhotos = [];
-  ents.forEach(e=>(e.photos||[]).forEach(p=>allPhotos.push({...p, entry:e})));
-  if(allPhotos.length===0){toast('Belum ada foto nota di bulan ini','err');return}
+
+  // Group photos by entry (entry-level grouping like the example)
+  const blocks = []; // { entry, photos[], label }
+  ents.forEach(e=>{
+    if(e.photos && e.photos.length>0){
+      blocks.push({entry:e, photos:e.photos, label:getDateLabelShort(e)});
+    }
+  });
+  if(blocks.length===0){toast('Belum ada foto nota di bulan ini','err');return}
 
   toast('Membuat Word...','ok');
+
+  // Pack blocks into rows: 2 single-photo entries per row, multi-photo entries take own row
+  const rows = [];
+  let i = 0;
+  while(i < blocks.length){
+    const b = blocks[i];
+    if(b.photos.length === 1){
+      if(i+1 < blocks.length && blocks[i+1].photos.length === 1){
+        rows.push({type:'pair', blocks:[b, blocks[i+1]]});
+        i += 2;
+      }else{
+        rows.push({type:'pair', blocks:[b, null]}); // alone
+        i += 1;
+      }
+    }else{
+      rows.push({type:'multi', blocks:[b]});
+      i += 1;
+    }
+  }
+
+  // Flatten photos and prepare media references
+  const allPhotos = [];
+  blocks.forEach(b=>b.photos.forEach(p=>{allPhotos.push(p)}));
+
+  for(let k=0;k<allPhotos.length;k++){
+    const p = allPhotos[k];
+    const dim = await getDataUrlDimensions(p.dataUrl);
+    p._w = dim.w; p._h = dim.h; p._idx = k+1;
+  }
+
   const zip = new JSZip();
 
   zip.file('[Content_Types].xml',
@@ -761,17 +914,16 @@ async function exportDocx(){
 <w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>
 </w:styles>`);
 
+  // Save image files & build relationship list
   const relEntries = [];
-  for(let i=0;i<allPhotos.length;i++){
-    const p = allPhotos[i];
+  for(let k=0;k<allPhotos.length;k++){
+    const p = allPhotos[k];
     const m = p.dataUrl.match(/^data:image\/(jpeg|jpg|png);base64,(.+)$/);
     if(!m)continue;
     const ext = m[1]==='png'?'png':'jpeg';
     const b64 = m[2];
-    const dim = await getDataUrlDimensions(p.dataUrl);
-    p._w=dim.w;p._h=dim.h;p._idx=i+1;
-    zip.file(`word/media/image${i+1}.${ext}`, b64, {base64:true});
-    relEntries.push(`<Relationship Id="rId${100+i}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image${i+1}.${ext}"/>`);
+    zip.file(`word/media/image${k+1}.${ext}`, b64, {base64:true});
+    relEntries.push(`<Relationship Id="rId${100+k}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image${k+1}.${ext}"/>`);
   }
   zip.file('word/_rels/document.xml.rels',
 `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -780,58 +932,80 @@ async function exportDocx(){
 ${relEntries.join('\n')}
 </Relationships>`);
 
-  const targetWidthEMU = 2400000;
-  const cellWidthDXA = 4500;
-  function imgXml(p, relId){
-    const aspect = p._h/p._w;
-    const cx = targetWidthEMU;
-    const cy = Math.round(targetWidthEMU*aspect);
-    return `<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:drawing>
-<wp:inline distT="0" distB="0" distL="0" distR="0" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">
-<wp:extent cx="${cx}" cy="${cy}"/>
-<wp:effectExtent l="0" t="0" r="0" b="0"/>
-<wp:docPr id="${relId}" name="Picture ${relId}"/>
-<wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr>
-<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
-<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
-<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
-<pic:nvPicPr><pic:cNvPr id="${relId}" name="image${relId}"/><pic:cNvPicPr/></pic:nvPicPr>
-<pic:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rId${100+relId-1}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>
-<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>
-</pic:pic></a:graphicData></a:graphic></w:drawing></w:r></w:p>`;
+  // === XML helpers ===
+  // Image inline drawing — namespaces declared at root
+  function imgRun(p, widthEMU){
+    const aspect = p._h / p._w;
+    const cx = widthEMU;
+    const cy = Math.round(widthEMU * aspect);
+    const id = p._idx;
+    return `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="${id}" name="Picture${id}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="${id}" name="image${id}"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rId${100+id-1}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
   }
-  function cellXml(p){
-    const safeLbl = (p.label||'').replace(/[<>&]/g,'');
-    return `<w:tc><w:tcPr><w:tcW w:w="${cellWidthDXA}" w:type="dxa"/></w:tcPr>
-<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="24"/></w:rPr><w:t>${safeLbl}</w:t></w:r></w:p>
-${imgXml(p, p._idx)}
-</w:tc>`;
+
+  // Label "box" — small bordered nested 1x1 table, right-aligned
+  function labelBox(text){
+    const safe = escapeXml(text);
+    return `<w:tbl><w:tblPr><w:tblW w:w="900" w:type="dxa"/><w:jc w:val="right"/><w:tblBorders><w:top w:val="single" w:sz="6" w:color="000000"/><w:left w:val="single" w:sz="6" w:color="000000"/><w:bottom w:val="single" w:sz="6" w:color="000000"/><w:right w:val="single" w:sz="6" w:color="000000"/></w:tblBorders><w:tblCellMar><w:top w:w="40" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:bottom w:w="40" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="900"/></w:tblGrid><w:tr><w:tc><w:tcPr><w:tcW w:w="900" w:type="dxa"/></w:tcPr><w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="0"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="22"/></w:rPr><w:t xml:space="preserve">${safe}</w:t></w:r></w:p></w:tc></w:tr></w:tbl>`;
   }
-  const rows = [];
-  for(let i=0;i<allPhotos.length;i+=2){
-    const pair = [allPhotos[i], allPhotos[i+1]];
-    const tcs = pair.map(p=> p ? cellXml(p) : `<w:tc><w:tcPr><w:tcW w:w="${cellWidthDXA}" w:type="dxa"/></w:tcPr><w:p/></w:tc>`).join('');
-    rows.push(`<w:tr>${tcs}</w:tr>`);
+
+  // Photo cell content (label box + photo)
+  function photoCellContent(block, photoWidthEMU){
+    const labelXml = labelBox(block.label);
+    // After nested table, MUST have a paragraph
+    const photoXml = block.photos.map(p =>
+      `<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="0"/></w:pPr>${imgRun(p, photoWidthEMU)}</w:p>`
+    ).join('');
+    return labelXml + photoXml;
   }
+
+  // Build each row XML
+  function renderPairRow(blockA, blockB){
+    const photoEMU = 2200000; // ~2.4"
+    const cellW = 4680;
+    const cellA = blockA
+      ? `<w:tc><w:tcPr><w:tcW w:w="${cellW}" w:type="dxa"/></w:tcPr>${photoCellContent(blockA, photoEMU)}</w:tc>`
+      : `<w:tc><w:tcPr><w:tcW w:w="${cellW}" w:type="dxa"/></w:tcPr><w:p/></w:tc>`;
+    const cellB = blockB
+      ? `<w:tc><w:tcPr><w:tcW w:w="${cellW}" w:type="dxa"/></w:tcPr>${photoCellContent(blockB, photoEMU)}</w:tc>`
+      : `<w:tc><w:tcPr><w:tcW w:w="${cellW}" w:type="dxa"/></w:tcPr><w:p/></w:tc>`;
+    return `<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:jc w:val="center"/></w:tblPr><w:tblGrid><w:gridCol w:w="${cellW}"/><w:gridCol w:w="${cellW}"/></w:tblGrid><w:tr>${cellA}${cellB}</w:tr></w:tbl>`;
+  }
+
+  function renderMultiRow(block){
+    const N = block.photos.length;
+    let photoEMU;
+    if(N===2) photoEMU = 2700000;       // ~2.95"
+    else if(N===3) photoEMU = 1800000;  // ~1.97"
+    else photoEMU = Math.floor(8500000/N); // fallback
+    const tableW = 9360;
+    const cellW = Math.floor(tableW / N);
+    const innerCells = block.photos.map(p =>
+      `<w:tc><w:tcPr><w:tcW w:w="${cellW}" w:type="dxa"/></w:tcPr><w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="0"/></w:pPr>${imgRun(p, photoEMU)}</w:p></w:tc>`
+    ).join('');
+    const grid = block.photos.map(()=>`<w:gridCol w:w="${cellW}"/>`).join('');
+    // Outer wrapper: label on top spanning all photos, then row of photo cells
+    return `<w:tbl><w:tblPr><w:tblW w:w="${tableW}" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:jc w:val="center"/></w:tblPr><w:tblGrid>${grid}</w:tblGrid><w:tr><w:tc><w:tcPr><w:tcW w:w="${tableW}" w:type="dxa"/><w:gridSpan w:val="${N}"/></w:tcPr>${labelBox(block.label)}<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr></w:p></w:tc></w:tr><w:tr>${innerCells}</w:tr></w:tbl>`;
+  }
+
+  // Compose rows
+  const bodyRows = rows.map(row=>{
+    if(row.type==='multi') return renderMultiRow(row.blocks[0]);
+    return renderPairRow(row.blocks[0], row.blocks[1]);
+  }).join('<w:p><w:pPr><w:spacing w:before="120" w:after="120"/></w:pPr></w:p>');
+
   const docXml =
 `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
-xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
-xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
 <w:body>
-<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="32"/></w:rPr><w:t>NOTA ${escapeXml(monthLabelID(currentMonth).toUpperCase())}</w:t></w:r></w:p>
+<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="32"/></w:rPr><w:t xml:space="preserve">NOTA ${escapeXml(monthLabelID(currentMonth).toUpperCase())}</w:t></w:r></w:p>
 <w:p/>
-<w:tbl>
-<w:tblPr><w:tblW w:w="9000" w:type="dxa"/><w:tblLayout w:type="fixed"/></w:tblPr>
-<w:tblGrid><w:gridCol w:w="${cellWidthDXA}"/><w:gridCol w:w="${cellWidthDXA}"/></w:tblGrid>
-${rows.join('\n')}
-</w:tbl>
+${bodyRows}
+<w:p/>
 <w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>
 </w:body>
 </w:document>`;
   zip.file('word/document.xml', docXml);
+
   const blob = await zip.generateAsync({type:'blob'});
   downloadBlob(blob, `Nota_${monthLabelID(currentMonth).replace(/\s+/g,'_')}.docx`);
   toast('Word di-download','ok');
