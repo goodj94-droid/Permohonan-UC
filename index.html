@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#2563eb">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Permohonan">
+<title>Permohonan Pembayaran & Nota</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  :root{
+    --bg:#f5f6fa;--card:#fff;--ink:#1a1d29;--muted:#6b7280;--line:#e5e7eb;
+    --primary:#2563eb;--primary-dk:#1d4ed8;--ok:#059669;--warn:#d97706;--err:#dc2626;
+    --radius:10px;--sh:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+  }
+  html,body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.45}
+  body{min-height:100vh;padding-bottom:80px;padding-bottom:calc(80px + env(safe-area-inset-bottom))}
+  .wrap{max-width:760px;margin:0 auto;padding:12px}
+  .topbar{position:sticky;top:0;background:var(--card);border-bottom:1px solid var(--line);padding:10px 14px;z-index:50;display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:calc(10px + env(safe-area-inset-top))}
+  .topbar h1{font-size:14px;font-weight:600}
+  .topbar .sub{font-size:11px;color:var(--muted);font-weight:400}
+  .badge{font-size:10px;padding:3px 7px;border-radius:99px;background:#eef2ff;color:#3730a3;font-weight:500}
+  .card{background:var(--card);border-radius:var(--radius);box-shadow:var(--sh);padding:14px;margin-bottom:12px}
+  .card h2{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between}
+  .row{display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+  .row > *{flex:1;min-width:0}
+  label{display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:500}
+  input,textarea,select{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;background:#fafbfc;transition:border-color .15s}
+  input:focus,textarea:focus,select:focus{outline:none;border-color:var(--primary);background:#fff}
+  textarea{resize:vertical;min-height:50px}
+  select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236b7280' d='M6 8L0 0h12z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:30px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 14px;border:none;border-radius:8px;font:inherit;font-weight:500;cursor:pointer;background:var(--primary);color:#fff;transition:transform .05s,background .15s}
+  .btn:hover{background:var(--primary-dk)}
+  .btn:active{transform:scale(.97)}
+  .btn.sec{background:#fff;color:var(--ink);border:1px solid var(--line)}
+  .btn.sec:hover{background:#f9fafb}
+  .btn.ok{background:var(--ok)}
+  .btn.warn{background:var(--warn)}
+  .btn.err{background:var(--err)}
+  .btn.sm{padding:6px 10px;font-size:12px}
+  .btn.icon{padding:8px;min-width:36px}
+  .btn.full{width:100%}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .stat{padding:10px;background:#f9fafb;border-radius:8px;text-align:center}
+  .stat .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
+  .stat .v{font-size:14px;font-weight:600;margin-top:2px}
+  .stat.pos .v{color:var(--ok)}
+  .stat.neg .v{color:var(--err)}
+  .entry{background:var(--card);border-radius:var(--radius);box-shadow:var(--sh);margin-bottom:10px;overflow:hidden;border-left:3px solid var(--primary)}
+  .entry.menginap{border-left-color:var(--warn)}
+  .entry-hdr{padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer}
+  .entry-hdr .info{flex:1;min-width:0}
+  .entry-hdr .date{font-weight:600;font-size:14px}
+  .entry-hdr .meta{font-size:11px;color:var(--muted);margin-top:2px}
+  .entry-hdr .tot{font-size:13px;color:var(--primary);font-weight:600;white-space:nowrap}
+  .entry.menginap .entry-hdr .tot{color:var(--warn)}
+  .entry-body{padding:0 14px 12px;display:none;border-top:1px solid var(--line);margin-top:0;padding-top:10px}
+  .entry.open .entry-body{display:block}
+  .entry.open .chev{transform:rotate(180deg)}
+  .chev{transition:transform .2s;color:var(--muted);font-size:11px}
+  .pill{display:inline-block;font-size:10px;padding:2px 7px;border-radius:99px;background:#dbeafe;color:#1e40af;font-weight:500;vertical-align:middle}
+  .pill.warn{background:#fef3c7;color:#92400e}
+  .item-row{display:grid;grid-template-columns:1fr 110px 30px;gap:6px;margin-bottom:6px;align-items:center}
+  .tujuan-block{border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;background:#fafbfc;position:relative}
+  .tujuan-block .rm{position:absolute;top:6px;right:6px;background:none;border:none;color:var(--err);cursor:pointer;font-size:18px;line-height:1;padding:2px 6px}
+  .akt-row{display:grid;grid-template-columns:1fr 30px;gap:6px;margin-top:6px;align-items:center}
+  .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin-top:8px}
+  .photo-cell{position:relative;aspect-ratio:3/4;background:#f3f4f6;border-radius:8px;overflow:hidden}
+  .photo-cell img{width:100%;height:100%;object-fit:cover}
+  .photo-cell .lbl{position:absolute;top:4px;right:4px;background:#fff;border:1px solid var(--line);border-radius:6px;padding:2px 6px;font-size:10px;font-weight:600}
+  .photo-cell .del{position:absolute;bottom:4px;right:4px;background:rgba(220,38,38,.9);color:#fff;border:none;width:22px;height:22px;border-radius:50%;cursor:pointer;font-size:14px;line-height:1}
+  .photo-add{aspect-ratio:3/4;border:2px dashed var(--line);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--muted);cursor:pointer;font-size:11px;text-align:center;padding:8px;transition:all .15s}
+  .photo-add:hover{border-color:var(--primary);color:var(--primary);background:#eff6ff}
+  .empty{text-align:center;padding:40px 20px;color:var(--muted)}
+  .empty .ico{font-size:36px;margin-bottom:8px;opacity:.5}
+  .actions-bar{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--line);padding:10px 12px;z-index:50;padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+  .actions-bar .inner{max-width:760px;margin:0 auto;display:flex;gap:6px;flex-wrap:wrap}
+  .actions-bar .btn{flex:1;min-width:0;font-size:12px;padding:9px 8px}
+  .toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#1f2937;color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;z-index:200;animation:fade .3s;box-shadow:0 4px 12px rgba(0,0,0,.2);max-width:90%;text-align:center}
+  .toast.err{background:#dc2626}.toast.ok{background:#059669}
+  @keyframes fade{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;display:none;align-items:flex-end;justify-content:center}
+  .modal-bg.show{display:flex}
+  .modal{background:var(--card);width:100%;max-width:600px;max-height:94vh;overflow-y:auto;border-radius:14px 14px 0 0;padding:16px;animation:slide .25s;padding-bottom:calc(16px + env(safe-area-inset-bottom))}
+  @keyframes slide{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+  .mh{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+  .mh h3{font-size:15px}
+  .x{background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;line-height:1;padding:0 4px}
+  details{margin-bottom:8px}
+  details summary{cursor:pointer;padding:8px 10px;background:#f9fafb;border-radius:8px;font-size:12px;color:var(--muted);font-weight:500;list-style:none}
+  details summary::-webkit-details-marker{display:none}
+  details summary::after{content:"▾";float:right;transition:transform .2s}
+  details[open] summary::after{transform:rotate(180deg)}
+  details > div{padding:10px 4px}
+  .help{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.4}
+  .seg{display:flex;background:#f3f4f6;border-radius:8px;padding:3px;margin-bottom:8px}
+  .seg button{flex:1;background:transparent;border:none;padding:8px 10px;border-radius:6px;font:inherit;font-size:13px;cursor:pointer;color:var(--muted)}
+  .seg button.on{background:var(--card);color:var(--primary);font-weight:600;box-shadow:var(--sh)}
+  .calc-box{padding:10px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;font-size:12px;color:#1e40af;margin:8px 0}
+  .calc-box b{font-size:14px}
+  .section-title{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin:14px 0 8px}
+  .install-banner{position:fixed;bottom:80px;left:12px;right:12px;background:var(--primary);color:#fff;padding:10px 14px;border-radius:10px;font-size:12px;display:none;align-items:center;justify-content:space-between;gap:8px;z-index:60;box-shadow:0 4px 12px rgba(37,99,235,.3)}
+  .install-banner.show{display:flex}
+  .install-banner button{background:#fff;color:var(--primary);border:none;padding:6px 12px;border-radius:6px;font-weight:600;cursor:pointer;font-size:12px}
+  .install-banner .closeb{background:transparent;color:#fff;font-size:18px;padding:0 4px}
+  @media (min-width:600px){
+    .item-row{grid-template-columns:1fr 140px 32px}
+    .actions-bar .btn{flex:0 1 auto;padding:9px 14px}
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <h1>Permohonan Pembayaran</h1>
+    <div class="sub">📅 <span id="periodLabel">—</span></div>
+  </div>
+  <span class="badge" id="storeBadge">tersimpan</span>
+</div>
+
+<div class="wrap">
+
+  <div class="card">
+    <h2>Periode <button class="btn sec sm" onclick="newMonth()">+ Bulan baru</button></h2>
+    <select id="monthSelect" onchange="changeMonth(this.value)"></select>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>⚙️ Pengaturan</summary>
+      <div>
+        <div class="row">
+          <div>
+            <label>Pengajuan bulan ini (Rp)</label>
+            <input type="number" id="metaPengajuan" placeholder="3000000">
+          </div>
+          <div>
+            <label>Nama Pembuat</label>
+            <input type="text" id="metaNama" placeholder="Nama">
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>Lokasi/Kantor</label>
+            <input type="text" id="metaLokasi" placeholder="Solo">
+          </div>
+        </div>
+      </div>
+    </details>
+  </div>
+
+  <div class="card">
+    <h2>Ringkasan <span id="entryCount" class="badge" style="background:#f3f4f6;color:var(--muted)">0 entry</span></h2>
+    <div class="grid3">
+      <div class="stat"><div class="k">Pengajuan</div><div class="v" id="sPengajuan">0</div></div>
+      <div class="stat"><div class="k">Realisasi</div><div class="v" id="sRealisasi">0</div></div>
+      <div class="stat" id="sSelisih"><div class="k">Selisih</div><div class="v">0</div></div>
+    </div>
+  </div>
+
+  <button class="btn full" onclick="openEntryModal()" style="margin-bottom:12px">+ Tambah Entry Perjalanan</button>
+
+  <div id="entryList"></div>
+
+  <div class="help" style="text-align:center;padding:8px">
+    Acuan: Tdk menginap Rp 125.000 / hari • Menginap Rp 300.000 / malam<br>
+    <em>Allowance dihitung otomatis. BBM/Tiket/Parkir input manual.</em>
+  </div>
+</div>
+
+<div class="install-banner" id="installBanner">
+  <span>📲 Install app ke home screen?</span>
+  <div style="display:flex;gap:6px;align-items:center">
+    <button onclick="doInstall()">Install</button>
+    <button class="closeb" onclick="document.getElementById('installBanner').classList.remove('show')">×</button>
+  </div>
+</div>
+
+<div class="actions-bar">
+  <div class="inner">
+    <button class="btn ok" onclick="exportExcel()">📊 Excel</button>
+    <button class="btn ok" onclick="exportDocx()">📷 Word</button>
+    <button class="btn sec" onclick="exportJSON()">💾 Backup</button>
+    <button class="btn sec" onclick="document.getElementById('importFile').click()">📂 Restore</button>
+    <input type="file" id="importFile" accept=".json" style="display:none" onchange="importJSON(event)">
+  </div>
+</div>
+
+<div class="modal-bg" id="entryModal">
+  <div class="modal">
+    <div class="mh">
+      <h3 id="modalTitle">Tambah Entry</h3>
+      <button class="x" onclick="closeEntryModal()">×</button>
+    </div>
+
+    <label>Tipe Perjalanan</label>
+    <div class="seg">
+      <button id="segHarian" onclick="setTipe('harian')">🚗 Pulang Hari (125rb)</button>
+      <button id="segMenginap" onclick="setTipe('menginap')">🏨 Menginap (300rb/malam)</button>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Tanggal Berangkat *</label>
+        <input type="date" id="tMulai">
+      </div>
+      <div id="endDateWrap">
+        <label>Tanggal Pulang *</label>
+        <input type="date" id="tSelesai">
+      </div>
+    </div>
+
+    <div class="calc-box" id="calcBox">—</div>
+
+    <label>Nama Trip / Lokasi (untuk label allowance)</label>
+    <input type="text" id="tNama" placeholder="Wonogiri / JV Marketing / Pandanaran">
+    <div class="help">Akan tampil sebagai "Allowance [nama]" di tabel Excel</div>
+
+    <div class="section-title">Biaya Lain</div>
+    <div id="biayaList"></div>
+    <button class="btn sec sm" onclick="addBiaya()">+ Tambah biaya (BBM, Tiket, Parkir, dll.)</button>
+
+    <div class="section-title">Tujuan & Aktivitas</div>
+    <div id="tujuanList"></div>
+    <button class="btn sec sm" onclick="addTujuan()">+ Tambah Tempat / RS</button>
+
+    <div class="section-title">Foto Nota</div>
+    <div class="photo-grid" id="photoGrid"></div>
+    <input type="file" id="photoInput" accept="image/*" multiple style="display:none" onchange="onPhotoSelect(event)">
+    <div class="help" style="margin-top:8px">Klik label foto untuk ubah (mis. "02", "13/14")</div>
+
+    <div style="display:flex;gap:8px;margin-top:18px">
+      <button class="btn err sec" onclick="deleteEntry()" id="delBtn" style="display:none">🗑 Hapus</button>
+      <button class="btn sec" onclick="closeEntryModal()" style="flex:1">Batal</button>
+      <button class="btn" onclick="saveEntry()" style="flex:1">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// =============== STORAGE (localStorage) ===============
+const STORE_KEY = 'permohonan_pembayaran_v2';
+const monthsShort = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const monthsLong = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const monthsID = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+
+let state = defaultState();
+let currentMonth = '';
+let editingId = null;
+let editingEntry = null;
+let deferredInstallPrompt = null;
+
+function defaultState(){
+  const today = new Date();
+  const mk = today.toISOString().substring(0,7);
+  return {
+    meta:{nama:'',lokasi:'Solo'},
+    pengajuanPerBulan:{[mk]:3000000},
+    entries:[]
+  };
+}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).substr(2,5)}
+
+function saveStore(){
+  setBadge('menyimpan...','#fef3c7','#92400e');
+  try{
+    localStorage.setItem(STORE_KEY, JSON.stringify(state));
+    setBadge('tersimpan','#dcfce7','#166534');
+  }catch(e){
+    console.error(e);
+    setBadge('penuh','#fee2e2','#991b1b');
+    if(e.name==='QuotaExceededError'||e.code===22){
+      toast('Storage HP penuh — backup ke file lalu hapus entry lama','err');
+    }else{
+      toast('Penyimpanan gagal','err');
+    }
+  }
+}
+function loadStore(){
+  try{
+    const r = localStorage.getItem(STORE_KEY);
+    if(r){state = JSON.parse(r)}
+  }catch(e){console.log('no saved data')}
+}
+function setBadge(text,bg,fg){
+  const b = document.getElementById('storeBadge');
+  b.textContent=text;b.style.background=bg||'#eef2ff';b.style.color=fg||'#3730a3';
+}
+let saveTimer;
+function scheduleSave(){clearTimeout(saveTimer);saveTimer=setTimeout(saveStore,500)}
+
+// =============== DATE HELPERS ===============
+function todayISO(){const d=new Date();const tz=d.getTimezoneOffset()*60000;return new Date(d-tz).toISOString().substring(0,10)}
+function addDays(iso,n){const d=new Date(iso+'T00:00:00');d.setDate(d.getDate()+n);return d.toISOString().substring(0,10)}
+function diffDays(a,b){return Math.round((new Date(b+'T00:00:00')-new Date(a+'T00:00:00'))/86400000)}
+function monthKey(iso){return iso.substring(0,7)}
+function monthLabelID(mk){const[y,m]=mk.split('-');return `${monthsID[+m-1]} ${y}`}
+function parseLocalDate(iso){const[y,m,d]=iso.split('-').map(Number);return new Date(y,m-1,d)}
+
+function formatDateID(entry){
+  const s=parseLocalDate(entry.tanggalMulai),e=parseLocalDate(entry.tanggalSelesai);
+  if(entry.tipe==='harian')return `${s.getDate()} ${monthsShort[s.getMonth()]} ${s.getFullYear()}`;
+  if(s.getMonth()===e.getMonth()&&s.getFullYear()===e.getFullYear())
+    return `${s.getDate()}–${e.getDate()} ${monthsShort[s.getMonth()]} ${s.getFullYear()}`;
+  return `${s.getDate()} ${monthsShort[s.getMonth()]} – ${e.getDate()} ${monthsShort[e.getMonth()]} ${e.getFullYear()}`;
+}
+function formatDateExcel(entry){
+  const s=parseLocalDate(entry.tanggalMulai),e=parseLocalDate(entry.tanggalSelesai);
+  if(entry.tipe==='harian')return `${s.getDate()}-${monthsShort[s.getMonth()]}-${String(s.getFullYear()).slice(2)}`;
+  if(s.getMonth()===e.getMonth()&&s.getFullYear()===e.getFullYear())
+    return `${s.getDate()}/${e.getDate()}-${monthsLong[s.getMonth()]}-${s.getFullYear()}`;
+  return `${s.getDate()} ${monthsShort[s.getMonth()]} - ${e.getDate()} ${monthsShort[e.getMonth()]} ${e.getFullYear()}`;
+}
+function formatDurasi(entry){
+  if(entry.tipe==='harian')return '';
+  const malam=Math.max(1,diffDays(entry.tanggalMulai,entry.tanggalSelesai));
+  const hari=malam+1;
+  return `${hari} hari ${malam} malam`;
+}
+function getMalam(entry){
+  if(entry.tipe==='harian')return 0;
+  return Math.max(1,diffDays(entry.tanggalMulai,entry.tanggalSelesai));
+}
+function getAllowance(entry){
+  return entry.tipe==='harian' ? 125000 : getMalam(entry)*300000;
+}
+function entryTotal(entry){
+  return getAllowance(entry) + (entry.biayaLain||[]).reduce((s,b)=>s+(+b.jumlah||0),0);
+}
+function getDateLabelShort(entry){
+  const s=parseLocalDate(entry.tanggalMulai),e=parseLocalDate(entry.tanggalSelesai);
+  if(entry.tipe==='harian')return String(s.getDate()).padStart(2,'0');
+  return `${s.getDate()}/${e.getDate()}`;
+}
+
+// =============== UTIL ===============
+function rp(n){return new Intl.NumberFormat('id-ID').format(Math.round(n||0))}
+function escape(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c])}
+function escapeXml(s){return String(s||'').replace(/[<>&'"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;',"'":'&apos;','"':'&quot;'})[c])}
+function toast(msg,type){
+  const el=document.createElement('div');el.className='toast'+(type?' '+type:'');el.textContent=msg;
+  document.body.appendChild(el);setTimeout(()=>el.remove(),2600);
+}
+
+// =============== MONTH SELECT ===============
+function getAvailableMonths(){
+  const set = new Set();
+  state.entries.forEach(e=>set.add(monthKey(e.tanggalMulai)));
+  Object.keys(state.pengajuanPerBulan).forEach(k=>set.add(k));
+  set.add(todayISO().substring(0,7));
+  return [...set].sort().reverse();
+}
+function renderMonthSelect(){
+  const sel = document.getElementById('monthSelect');
+  const months = getAvailableMonths();
+  sel.innerHTML = months.map(m=>`<option value="${m}" ${m===currentMonth?'selected':''}>${monthLabelID(m)}</option>`).join('');
+}
+function changeMonth(mk){currentMonth=mk;renderAll();scheduleSave()}
+function newMonth(){
+  const mk = prompt('Bulan baru (format YYYY-MM, mis. 2026-05):', addDays(currentMonth+'-01',32).substring(0,7));
+  if(!mk||!/^\d{4}-\d{2}$/.test(mk))return;
+  if(!state.pengajuanPerBulan[mk])state.pengajuanPerBulan[mk]=3000000;
+  currentMonth = mk;
+  renderMonthSelect();
+  renderAll();
+  scheduleSave();
+}
+
+function getEntriesForMonth(mk){
+  return state.entries
+    .filter(e=>monthKey(e.tanggalMulai)===mk)
+    .sort((a,b)=>a.tanggalMulai.localeCompare(b.tanggalMulai));
+}
+
+// =============== RENDER ===============
+function renderAll(){
+  if(!currentMonth){const months=getAvailableMonths();currentMonth=months[0]}
+  document.getElementById('periodLabel').textContent = monthLabelID(currentMonth);
+  document.getElementById('metaPengajuan').value = state.pengajuanPerBulan[currentMonth] ?? 3000000;
+  document.getElementById('metaNama').value = state.meta.nama || '';
+  document.getElementById('metaLokasi').value = state.meta.lokasi || '';
+
+  const ents = getEntriesForMonth(currentMonth);
+  const peng = +(state.pengajuanPerBulan[currentMonth]||0);
+  const real = ents.reduce((s,e)=>s+entryTotal(e),0);
+  const sel = peng-real;
+  document.getElementById('sPengajuan').textContent = rp(peng);
+  document.getElementById('sRealisasi').textContent = rp(real);
+  const sSel = document.getElementById('sSelisih');
+  sSel.querySelector('.v').textContent = rp(sel);
+  sSel.querySelector('.k').textContent = sel>=0?'Kelebihan':'Kurang';
+  sSel.className = 'stat '+(sel>=0?'pos':'neg');
+  document.getElementById('entryCount').textContent = `${ents.length} entry`;
+  renderMonthSelect();
+  renderEntryList(ents);
+}
+function renderEntryList(ents){
+  const list = document.getElementById('entryList');
+  if(ents.length===0){
+    list.innerHTML = '<div class="card empty"><div class="ico">📋</div>Belum ada entry bulan ini.<br><small>Klik tombol "+ Tambah Entry" di atas.</small></div>';
+    return;
+  }
+  list.innerHTML = ents.map(e=>{
+    const tot = entryTotal(e);
+    const alw = getAllowance(e);
+    const places = (e.tujuan||[]).map(t=>t.tempat).filter(Boolean).join(', ');
+    const biayaHtml = (e.biayaLain||[]).map(b=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0"><span>${escape(b.nama)}</span><span style="color:var(--muted)">Rp ${rp(b.jumlah)}</span></div>`).join('');
+    const tujuanHtml = (e.tujuan||[]).map(t=>{
+      const akts = (t.aktivitas||[]).filter(a=>a).map(a=>`<div style="font-size:12px;color:var(--muted);padding-left:10px">• ${escape(a)}</div>`).join('');
+      return `<div style="margin-top:4px"><div style="font-weight:600;font-size:12px">${escape(t.tempat)}</div>${akts}</div>`;
+    }).join('');
+    const photoHtml = (e.photos||[]).length ? `<div class="photo-grid" style="margin-top:8px">${e.photos.map(p=>`<div class="photo-cell"><img src="${p.dataUrl}"><span class="lbl">${escape(p.label)}</span></div>`).join('')}</div>`:'';
+    const pill = e.tipe==='harian'?'<span class="pill">Pulang hari</span>':`<span class="pill warn">${getMalam(e)} malam</span>`;
+    return `
+      <div class="entry ${e.tipe==='menginap'?'menginap':''}" id="entry-${e.id}">
+        <div class="entry-hdr" onclick="toggleEntry('${e.id}')">
+          <div class="info">
+            <div class="date">${formatDateID(e)} ${pill}</div>
+            <div class="meta">${escape(e.namaTrip||places||'(tanpa nama)')}</div>
+          </div>
+          <div class="tot">Rp ${rp(tot)}</div>
+          <span class="chev">▼</span>
+        </div>
+        <div class="entry-body">
+          <div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0;font-weight:500"><span>Allowance ${e.tipe==='menginap'?`(${getMalam(e)} mlm)`:''}</span><span>Rp ${rp(alw)}</span></div>
+          ${biayaHtml}
+          ${tujuanHtml?'<hr style="border:none;border-top:1px solid var(--line);margin:8px 0">'+tujuanHtml:''}
+          ${photoHtml}
+          <div style="margin-top:10px"><button class="btn sm" onclick="event.stopPropagation();openEntryModal('${e.id}')">✏️ Edit</button></div>
+        </div>
+      </div>`;
+  }).join('');
+}
+function toggleEntry(id){document.getElementById('entry-'+id).classList.toggle('open')}
+
+document.getElementById('metaPengajuan').addEventListener('input',e=>{
+  state.pengajuanPerBulan[currentMonth] = +e.target.value||0;
+  renderAll();scheduleSave();
+});
+document.getElementById('metaNama').addEventListener('input',e=>{state.meta.nama=e.target.value;scheduleSave()});
+document.getElementById('metaLokasi').addEventListener('input',e=>{state.meta.lokasi=e.target.value;scheduleSave()});
+
+// =============== ENTRY MODAL ===============
+function openEntryModal(id){
+  if(id){
+    const e = state.entries.find(x=>x.id===id);
+    if(!e)return;
+    editingId = id;
+    editingEntry = JSON.parse(JSON.stringify(e));
+    document.getElementById('modalTitle').textContent='Edit Entry';
+    document.getElementById('delBtn').style.display='';
+  }else{
+    editingId = null;
+    const t = todayISO();
+    const def = monthKey(t)===currentMonth ? t : currentMonth+'-01';
+    editingEntry = {
+      id:uid(),tipe:'harian',
+      tanggalMulai:def,tanggalSelesai:def,
+      namaTrip:'',
+      biayaLain:[],
+      tujuan:[{tempat:'',aktivitas:['']}],
+      photos:[]
+    };
+    document.getElementById('modalTitle').textContent='Tambah Entry';
+    document.getElementById('delBtn').style.display='none';
+  }
+  document.getElementById('tMulai').value = editingEntry.tanggalMulai;
+  document.getElementById('tSelesai').value = editingEntry.tanggalSelesai;
+  document.getElementById('tNama').value = editingEntry.namaTrip||'';
+  setTipeUI(editingEntry.tipe);
+  renderModalLists();
+  updateAllowance();
+  document.getElementById('entryModal').classList.add('show');
+}
+function closeEntryModal(){
+  document.getElementById('entryModal').classList.remove('show');
+  editingId=null;editingEntry=null;
+}
+
+document.getElementById('tNama').addEventListener('input',e=>{if(editingEntry)editingEntry.namaTrip=e.target.value});
+
+function setTipe(t){
+  editingEntry.tipe = t;
+  setTipeUI(t);
+  if(t==='menginap'){
+    if(diffDays(editingEntry.tanggalMulai,editingEntry.tanggalSelesai)<1){
+      editingEntry.tanggalSelesai = addDays(editingEntry.tanggalMulai,1);
+      document.getElementById('tSelesai').value = editingEntry.tanggalSelesai;
+    }
+  }else{
+    editingEntry.tanggalSelesai = editingEntry.tanggalMulai;
+    document.getElementById('tSelesai').value = editingEntry.tanggalSelesai;
+  }
+  updateAllowance();
+}
+function setTipeUI(t){
+  document.getElementById('segHarian').classList.toggle('on',t==='harian');
+  document.getElementById('segMenginap').classList.toggle('on',t==='menginap');
+  document.getElementById('endDateWrap').style.display = t==='menginap'?'':'none';
+}
+document.getElementById('tMulai').addEventListener('change',e=>{
+  editingEntry.tanggalMulai = e.target.value;
+  if(editingEntry.tipe==='harian'){
+    editingEntry.tanggalSelesai = e.target.value;
+    document.getElementById('tSelesai').value = e.target.value;
+  }
+  updateAllowance();
+});
+document.getElementById('tSelesai').addEventListener('change',e=>{
+  editingEntry.tanggalSelesai = e.target.value;
+  updateAllowance();
+});
+
+function updateAllowance(){
+  if(!editingEntry)return;
+  const alw = getAllowance(editingEntry);
+  const tot = entryTotal(editingEntry);
+  const cb = document.getElementById('calcBox');
+  if(editingEntry.tipe==='harian'){
+    cb.innerHTML = `Allowance: <b>Rp ${rp(alw)}</b> (pulang hari) • Total entry: <b>Rp ${rp(tot)}</b>`;
+  }else{
+    const malam = getMalam(editingEntry);
+    cb.innerHTML = `Allowance: <b>Rp ${rp(alw)}</b> (${malam} malam × Rp 300.000) • Total entry: <b>Rp ${rp(tot)}</b>`;
+  }
+}
+
+function renderModalLists(){
+  const bl = document.getElementById('biayaList');
+  bl.innerHTML = (editingEntry.biayaLain||[]).map((b,i)=>`
+    <div class="item-row">
+      <input type="text" placeholder="Nama (BBM, Tiket Kereta, Parkir)" value="${escape(b.nama)}" onchange="editingEntry.biayaLain[${i}].nama=this.value;updateAllowance()">
+      <input type="number" placeholder="Jumlah" value="${b.jumlah||''}" onchange="editingEntry.biayaLain[${i}].jumlah=+this.value||0;updateAllowance()">
+      <button class="btn err sec icon sm" onclick="editingEntry.biayaLain.splice(${i},1);renderModalLists();updateAllowance()">×</button>
+    </div>
+  `).join('');
+
+  const tl = document.getElementById('tujuanList');
+  tl.innerHTML = (editingEntry.tujuan||[]).map((t,i)=>{
+    const akts = (t.aktivitas||['']).map((a,j)=>`
+      <div class="akt-row">
+        <input type="text" placeholder="Aktivitas (mis. Perbaikan venti, Instal CPAP)" value="${escape(a)}" onchange="editingEntry.tujuan[${i}].aktivitas[${j}]=this.value">
+        <button class="btn err sec icon sm" onclick="editingEntry.tujuan[${i}].aktivitas.splice(${j},1);renderModalLists()">×</button>
+      </div>`).join('');
+    return `<div class="tujuan-block">
+      <button class="rm" onclick="editingEntry.tujuan.splice(${i},1);renderModalLists()" title="Hapus tempat">×</button>
+      <label>Tempat / RS (otomatis bold di Excel)</label>
+      <input type="text" placeholder="RS Hermina Wonogiri" value="${escape(t.tempat)}" onchange="editingEntry.tujuan[${i}].tempat=this.value">
+      <div style="margin-top:8px"><label>Aktivitas</label>${akts}</div>
+      <button class="btn sec sm" style="margin-top:6px" onclick="editingEntry.tujuan[${i}].aktivitas.push('');renderModalLists()">+ Aktivitas</button>
+    </div>`;
+  }).join('');
+
+  const pg = document.getElementById('photoGrid');
+  let html = (editingEntry.photos||[]).map((p,i)=>`
+    <div class="photo-cell">
+      <img src="${p.dataUrl}">
+      <span class="lbl" onclick="renamePhoto(${i})" style="cursor:pointer">${escape(p.label)}</span>
+      <button class="del" onclick="editingEntry.photos.splice(${i},1);renderModalLists()">×</button>
+    </div>
+  `).join('');
+  html += `<div class="photo-add" onclick="document.getElementById('photoInput').click()">+ Foto</div>`;
+  pg.innerHTML = html;
+}
+
+function addBiaya(){
+  if(!editingEntry.biayaLain)editingEntry.biayaLain=[];
+  editingEntry.biayaLain.push({nama:'',jumlah:0});
+  renderModalLists();
+}
+function addTujuan(){
+  if(!editingEntry.tujuan)editingEntry.tujuan=[];
+  editingEntry.tujuan.push({tempat:'',aktivitas:['']});
+  renderModalLists();
+}
+function renamePhoto(i){
+  const cur = editingEntry.photos[i].label;
+  const nw = prompt('Label foto:', cur);
+  if(nw!==null){editingEntry.photos[i].label = nw.trim();renderModalLists()}
+}
+
+function saveEntry(){
+  editingEntry.tanggalMulai = document.getElementById('tMulai').value;
+  editingEntry.tanggalSelesai = editingEntry.tipe==='harian' ? editingEntry.tanggalMulai : document.getElementById('tSelesai').value;
+  editingEntry.namaTrip = document.getElementById('tNama').value.trim();
+  if(!editingEntry.tanggalMulai){toast('Tanggal harus diisi','err');return}
+  if(editingEntry.tipe==='menginap' && diffDays(editingEntry.tanggalMulai,editingEntry.tanggalSelesai)<1){
+    toast('Tanggal pulang harus setelah berangkat','err');return;
+  }
+  editingEntry.biayaLain = (editingEntry.biayaLain||[]).filter(b=>b.nama || b.jumlah);
+  editingEntry.tujuan = (editingEntry.tujuan||[]).map(t=>({...t, aktivitas:(t.aktivitas||[]).filter(a=>a)})).filter(t=>t.tempat||t.aktivitas.length);
+
+  if(editingId){
+    const idx = state.entries.findIndex(e=>e.id===editingId);
+    state.entries[idx] = editingEntry;
+  }else{
+    state.entries.push(editingEntry);
+  }
+  const newMK = monthKey(editingEntry.tanggalMulai);
+  if(newMK !== currentMonth){
+    if(!state.pengajuanPerBulan[newMK])state.pengajuanPerBulan[newMK]=3000000;
+    currentMonth = newMK;
+    toast('Pindah ke bulan '+monthLabelID(newMK),'ok');
+  }
+  closeEntryModal();
+  renderAll();
+  saveStore();
+  toast('Tersimpan','ok');
+}
+function deleteEntry(){
+  if(!confirm('Hapus entry ini?'))return;
+  state.entries = state.entries.filter(e=>e.id!==editingId);
+  closeEntryModal();
+  renderAll();
+  saveStore();
+}
+
+// =============== FOTO ===============
+async function onPhotoSelect(e){
+  const files = Array.from(e.target.files);
+  e.target.value = '';
+  for(const f of files){
+    try{
+      const compressed = await compressImage(f);
+      const lbl = getDateLabelShort(editingEntry);
+      editingEntry.photos.push({label:lbl, dataUrl:compressed});
+    }catch(err){console.error(err);toast('Gagal proses foto','err')}
+  }
+  renderModalLists();
+}
+function compressImage(file){
+  return new Promise((res,rej)=>{
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = ()=>{
+      URL.revokeObjectURL(url);
+      const MAX = 900;
+      let {width:w, height:h} = img;
+      if(w>MAX||h>MAX){const r=Math.min(MAX/w,MAX/h);w=Math.round(w*r);h=Math.round(h*r)}
+      const c = document.createElement('canvas');
+      c.width=w;c.height=h;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle='#fff';ctx.fillRect(0,0,w,h);
+      ctx.drawImage(img,0,0,w,h);
+      res(c.toDataURL('image/jpeg',0.72));
+    };
+    img.onerror = rej;
+    img.src = url;
+  });
+}
+
+// =============== EXPORT EXCEL ===============
+function exportExcel(){
+  const ents = getEntriesForMonth(currentMonth);
+  if(ents.length===0){toast('Tidak ada entry bulan ini','err');return}
+  const aoa = [];
+  aoa.push(['PERMOHONAN PEMBAYARAN','','','']);
+  aoa.push(['','Pengajuan DANA ADVANCE','','']);
+  aoa.push(['','Penyelesaian dana ADVANCE yang diterima','','']);
+  aoa.push(['','REIMBURSE ( klaim ) Lampirkan BON Asli','','']);
+  aoa.push(['Tanggal','Untuk Pembiayaan','Jumlah','Keterangan']);
+
+  const merges = [{s:{r:0,c:0},e:{r:0,c:3}}];
+
+  ents.forEach(e=>{
+    aoa.push(['','','','']);
+    const itemRows = [];
+    const allowanceLabel = `Allowance ${e.namaTrip || (e.tujuan?.[0]?.tempat?.replace(/^RS[ID]?\s+/,'')||'')}`.trim();
+    itemRows.push({item:allowanceLabel, jumlah:getAllowance(e)});
+    (e.biayaLain||[]).forEach(b=>itemRows.push({item:b.nama, jumlah:+b.jumlah||0}));
+    const ketRows = [];
+    (e.tujuan||[]).forEach(t=>{
+      if(t.tempat)ketRows.push({text:t.tempat,bold:true});
+      (t.aktivitas||[]).forEach(a=>{if(a)ketRows.push({text:a,bold:false})});
+    });
+    const dateLabel = formatDateExcel(e);
+    const durLabel = formatDurasi(e);
+    const maxR = Math.max(itemRows.length, ketRows.length, 1);
+    for(let i=0;i<maxR;i++){
+      const tgl = i===0?dateLabel : (i===1?durLabel:'');
+      const it = itemRows[i] || {item:'',jumlah:''};
+      const ket = ketRows[i] || {text:'',bold:false};
+      aoa.push([tgl, it.item, it.jumlah===''?'':+it.jumlah||0, ket.text]);
+    }
+  });
+
+  const total = ents.reduce((s,e)=>s+entryTotal(e),0);
+  aoa.push([]);
+  aoa.push(['','Total', total,'']);
+  aoa.push([]);
+  aoa.push(['Pengajuan','', +(state.pengajuanPerBulan[currentMonth]||0),'']);
+  aoa.push(['Realisasi','', total,'']);
+  const sel = (+(state.pengajuanPerBulan[currentMonth]||0)) - total;
+  aoa.push([sel>=0?'Kelebihan':'Kurang','', sel,'']);
+  aoa.push([]);
+  aoa.push(['Dibuat oleh,','','Mengetahui,','Menyetujui,']);
+  aoa.push([]);aoa.push([]);aoa.push([]);
+  aoa.push([`(${state.meta.nama||'.................'})`,'','(.................)','(.................)']);
+  aoa.push([]);
+  aoa.push(['Allowance untuk perjalanan up Country','','','']);
+  aoa.push([]);
+  aoa.push(['Perjalanan tidak menginap','','Rp. 125.000/hari','']);
+  aoa.push(['Perjalanan menginap utk Sales & Teknisi','','Rp. 300.000/hari','']);
+  aoa.push(['Perjalanan menginap utk Supervisor','','Rp. 350.000/hari','']);
+  aoa.push(['Perjalanan menginap utk Manager','','Rp. 500.000/hari','']);
+  aoa.push([]);
+  aoa.push(['Allowance perjalanan tidak termasuk biaya tiket pesawat dan kendaraan umum (dan taxi dalam kota)','','','']);
+  aoa.push(['Pengajuan untuk allowance ini harap dikirimkan ke Keuangan 2 (dua) hari sebelum keberangkatan','','','']);
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{wch:20},{wch:38},{wch:14},{wch:42}];
+  ws['!merges'] = merges;
+  for(const a in ws){
+    if(a.startsWith('!'))continue;
+    const c = ws[a];
+    if(typeof c.v==='number'){c.t='n';c.z='#,##0'}
+  }
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Permohonan');
+  XLSX.writeFile(wb, `Permohonan_${monthLabelID(currentMonth).replace(/\s+/g,'_')}.xlsx`);
+  toast('Excel di-download','ok');
+}
+
+// =============== EXPORT WORD ===============
+async function exportDocx(){
+  const ents = getEntriesForMonth(currentMonth);
+  const allPhotos = [];
+  ents.forEach(e=>(e.photos||[]).forEach(p=>allPhotos.push({...p, entry:e})));
+  if(allPhotos.length===0){toast('Belum ada foto nota di bulan ini','err');return}
+
+  toast('Membuat Word...','ok');
+  const zip = new JSZip();
+
+  zip.file('[Content_Types].xml',
+`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Default Extension="jpeg" ContentType="image/jpeg"/>
+<Default Extension="jpg" ContentType="image/jpeg"/>
+<Default Extension="png" ContentType="image/png"/>
+<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+</Types>`);
+  zip.file('_rels/.rels',
+`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`);
+  zip.file('word/styles.xml',
+`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>
+</w:styles>`);
+
+  const relEntries = [];
+  for(let i=0;i<allPhotos.length;i++){
+    const p = allPhotos[i];
+    const m = p.dataUrl.match(/^data:image\/(jpeg|jpg|png);base64,(.+)$/);
+    if(!m)continue;
+    const ext = m[1]==='png'?'png':'jpeg';
+    const b64 = m[2];
+    const dim = await getDataUrlDimensions(p.dataUrl);
+    p._w=dim.w;p._h=dim.h;p._idx=i+1;
+    zip.file(`word/media/image${i+1}.${ext}`, b64, {base64:true});
+    relEntries.push(`<Relationship Id="rId${100+i}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image${i+1}.${ext}"/>`);
+  }
+  zip.file('word/_rels/document.xml.rels',
+`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+${relEntries.join('\n')}
+</Relationships>`);
+
+  const targetWidthEMU = 2400000;
+  const cellWidthDXA = 4500;
+  function imgXml(p, relId){
+    const aspect = p._h/p._w;
+    const cx = targetWidthEMU;
+    const cy = Math.round(targetWidthEMU*aspect);
+    return `<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:drawing>
+<wp:inline distT="0" distB="0" distL="0" distR="0" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">
+<wp:extent cx="${cx}" cy="${cy}"/>
+<wp:effectExtent l="0" t="0" r="0" b="0"/>
+<wp:docPr id="${relId}" name="Picture ${relId}"/>
+<wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr>
+<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+<pic:nvPicPr><pic:cNvPr id="${relId}" name="image${relId}"/><pic:cNvPicPr/></pic:nvPicPr>
+<pic:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rId${100+relId-1}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>
+<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>
+</pic:pic></a:graphicData></a:graphic></w:drawing></w:r></w:p>`;
+  }
+  function cellXml(p){
+    const safeLbl = (p.label||'').replace(/[<>&]/g,'');
+    return `<w:tc><w:tcPr><w:tcW w:w="${cellWidthDXA}" w:type="dxa"/></w:tcPr>
+<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="24"/></w:rPr><w:t>${safeLbl}</w:t></w:r></w:p>
+${imgXml(p, p._idx)}
+</w:tc>`;
+  }
+  const rows = [];
+  for(let i=0;i<allPhotos.length;i+=2){
+    const pair = [allPhotos[i], allPhotos[i+1]];
+    const tcs = pair.map(p=> p ? cellXml(p) : `<w:tc><w:tcPr><w:tcW w:w="${cellWidthDXA}" w:type="dxa"/></w:tcPr><w:p/></w:tc>`).join('');
+    rows.push(`<w:tr>${tcs}</w:tr>`);
+  }
+  const docXml =
+`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+<w:body>
+<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="32"/></w:rPr><w:t>NOTA ${escapeXml(monthLabelID(currentMonth).toUpperCase())}</w:t></w:r></w:p>
+<w:p/>
+<w:tbl>
+<w:tblPr><w:tblW w:w="9000" w:type="dxa"/><w:tblLayout w:type="fixed"/></w:tblPr>
+<w:tblGrid><w:gridCol w:w="${cellWidthDXA}"/><w:gridCol w:w="${cellWidthDXA}"/></w:tblGrid>
+${rows.join('\n')}
+</w:tbl>
+<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>
+</w:body>
+</w:document>`;
+  zip.file('word/document.xml', docXml);
+  const blob = await zip.generateAsync({type:'blob'});
+  downloadBlob(blob, `Nota_${monthLabelID(currentMonth).replace(/\s+/g,'_')}.docx`);
+  toast('Word di-download','ok');
+}
+function getDataUrlDimensions(dataUrl){
+  return new Promise(res=>{
+    const img = new Image();
+    img.onload = ()=>res({w:img.width,h:img.height});
+    img.onerror = ()=>res({w:600,h:800});
+    img.src = dataUrl;
+  });
+}
+function downloadBlob(blob, name){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url;a.download=name;
+  document.body.appendChild(a);a.click();
+  setTimeout(()=>{a.remove();URL.revokeObjectURL(url)},100);
+}
+
+// =============== JSON ===============
+function exportJSON(){
+  const blob = new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+  downloadBlob(blob, `backup_permohonan_${todayISO()}.json`);
+  toast('Backup berhasil','ok');
+}
+function importJSON(e){
+  const f = e.target.files[0];
+  if(!f)return;
+  const r = new FileReader();
+  r.onload = ()=>{
+    try{
+      const obj = JSON.parse(r.result);
+      if(!obj.meta||!Array.isArray(obj.entries))throw new Error();
+      if(!confirm('Ganti semua data dengan isi backup?'))return;
+      state = obj;
+      currentMonth = '';
+      renderAll();saveStore();
+      toast('Restore berhasil','ok');
+    }catch(err){toast('File backup tidak valid','err')}
+  };
+  r.readAsText(f);
+  e.target.value='';
+}
+
+// =============== PWA INSTALL ===============
+window.addEventListener('beforeinstallprompt', (e)=>{
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  if(!localStorage.getItem('install_dismissed')){
+    document.getElementById('installBanner').classList.add('show');
+  }
+});
+function doInstall(){
+  if(!deferredInstallPrompt)return;
+  deferredInstallPrompt.prompt();
+  deferredInstallPrompt.userChoice.then(()=>{
+    document.getElementById('installBanner').classList.remove('show');
+    localStorage.setItem('install_dismissed','1');
+    deferredInstallPrompt = null;
+  });
+}
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('sw.js').catch(err=>console.log('SW reg failed:',err));
+  });
+}
+
+// =============== BOOT ===============
+loadStore();
+renderAll();
+</script>
+</body>
+</html>
