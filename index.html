@@ -1066,7 +1066,8 @@ ${relEntries.join('\n')}
 
   zip.file('word/document.xml', docXml);
 
-  const blob = await zip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+  const buf = await zip.generateAsync({type:'uint8array'});
+  const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
   downloadBlob(blob, `Nota_${monthLabelID(currentMonth).replace(/\s+/g,'_')}.docx`);
   toast('Word di-download','ok');
 }
@@ -1079,11 +1080,29 @@ function getDataUrlDimensions(dataUrl){
   });
 }
 function downloadBlob(blob, name){
-  const url = URL.createObjectURL(blob);
+  // Force correct MIME type based on extension to prevent browsers
+  // from appending .zip when underlying blob is detected as zip
+  const ext = name.split('.').pop().toLowerCase();
+  const mimeMap = {
+    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'json': 'application/json',
+    'pdf':  'application/pdf'
+  };
+  const correctType = mimeMap[ext] || blob.type || 'application/octet-stream';
+  // If blob already has correct type, use it; otherwise wrap it
+  let finalBlob = blob;
+  if(blob.type !== correctType){
+    finalBlob = new Blob([blob], {type: correctType});
+  }
+  const url = URL.createObjectURL(finalBlob);
   const a = document.createElement('a');
-  a.href=url;a.download=name;
-  document.body.appendChild(a);a.click();
-  setTimeout(()=>{a.remove();URL.revokeObjectURL(url)},100);
+  a.href = url;
+  a.download = name;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{a.remove();URL.revokeObjectURL(url)},200);
 }
 
 // =============== JSON ===============

@@ -1,5 +1,5 @@
 // Service Worker untuk Permohonan App — offline support
-const CACHE_NAME = 'permohonan-v3';
+const CACHE_NAME = 'permohonan-v4';
 const STATIC_ASSETS = [
   './',
   './index.html',
