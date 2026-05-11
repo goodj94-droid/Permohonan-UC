@@ -850,8 +850,7 @@ async function exportExcel(){
 async function exportDocx(){
   const ents = getEntriesForMonth(currentMonth);
 
-  // Group photos by entry (entry-level grouping like the example)
-  const blocks = []; // { entry, photos[], label }
+  const blocks = [];
   ents.forEach(e=>{
     if(e.photos && e.photos.length>0){
       blocks.push({entry:e, photos:e.photos, label:getDateLabelShort(e)});
@@ -861,7 +860,7 @@ async function exportDocx(){
 
   toast('Membuat Word...','ok');
 
-  // Pack blocks into rows: 2 single-photo entries per row, multi-photo entries take own row
+  // Pack into table rows: pair single-photo entries, multi-photo gets own row (gridSpan=2)
   const rows = [];
   let i = 0;
   while(i < blocks.length){
@@ -871,7 +870,7 @@ async function exportDocx(){
         rows.push({type:'pair', blocks:[b, blocks[i+1]]});
         i += 2;
       }else{
-        rows.push({type:'pair', blocks:[b, null]}); // alone
+        rows.push({type:'pair', blocks:[b, null]});
         i += 1;
       }
     }else{
@@ -880,10 +879,9 @@ async function exportDocx(){
     }
   }
 
-  // Flatten photos and prepare media references
+  // Assign image indices
   const allPhotos = [];
-  blocks.forEach(b=>b.photos.forEach(p=>{allPhotos.push(p)}));
-
+  blocks.forEach(b=>b.photos.forEach(p=>allPhotos.push(p)));
   for(let k=0;k<allPhotos.length;k++){
     const p = allPhotos[k];
     const dim = await getDataUrlDimensions(p.dataUrl);
@@ -892,6 +890,7 @@ async function exportDocx(){
 
   const zip = new JSZip();
 
+  // === [Content_Types].xml ===
   zip.file('[Content_Types].xml',
 `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -902,19 +901,79 @@ async function exportDocx(){
 <Default Extension="png" ContentType="image/png"/>
 <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
 <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+<Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>
+<Override PartName="/word/fontTable.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml"/>
+<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
 </Types>`);
+
+  // === Root _rels/.rels ===
   zip.file('_rels/.rels',
 `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
 </Relationships>`);
+
+  // === docProps/core.xml ===
+  const now = new Date().toISOString().replace(/\.\d+Z$/,'Z');
+  zip.file('docProps/core.xml',
+`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<dc:title>Nota ${escapeXml(monthLabelID(currentMonth))}</dc:title>
+<dc:creator>Permohonan App</dc:creator>
+<cp:lastModifiedBy>Permohonan App</cp:lastModifiedBy>
+<dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created>
+<dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified>
+</cp:coreProperties>`);
+
+  // === docProps/app.xml ===
+  zip.file('docProps/app.xml',
+`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+<Application>Permohonan App</Application>
+<DocSecurity>0</DocSecurity>
+<ScaleCrop>false</ScaleCrop>
+<SharedDoc>false</SharedDoc>
+<HyperlinksChanged>false</HyperlinksChanged>
+<AppVersion>1.0</AppVersion>
+</Properties>`);
+
+  // === word/settings.xml ===
+  zip.file('word/settings.xml',
+`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:zoom w:percent="100"/>
+<w:defaultTabStop w:val="720"/>
+<w:characterSpacingControl w:val="doNotCompress"/>
+<w:compat>
+<w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/>
+</w:compat>
+</w:settings>`);
+
+  // === word/fontTable.xml ===
+  zip.file('word/fontTable.xml',
+`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:fonts xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:font w:name="Calibri"><w:family w:val="swiss"/><w:pitch w:val="variable"/></w:font>
+</w:fonts>`);
+
+  // === word/styles.xml ===
   zip.file('word/styles.xml',
 `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>
+<w:docDefaults>
+<w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr></w:rPrDefault>
+<w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="259" w:lineRule="auto"/></w:pPr></w:pPrDefault>
+</w:docDefaults>
+<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>
+<w:style w:type="character" w:default="1" w:styleId="DefaultParagraphFont"><w:name w:val="Default Paragraph Font"/><w:uiPriority w:val="1"/><w:semiHidden/><w:unhideWhenUsed/></w:style>
+<w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/><w:uiPriority w:val="99"/><w:semiHidden/><w:unhideWhenUsed/><w:tblPr><w:tblInd w:w="0" w:type="dxa"/><w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="108" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style>
+<w:style w:type="numbering" w:default="1" w:styleId="NoList"><w:name w:val="No List"/><w:uiPriority w:val="99"/><w:semiHidden/><w:unhideWhenUsed/></w:style>
 </w:styles>`);
 
-  // Save image files & build relationship list
+  // === Image files & relationship list ===
   const relEntries = [];
   for(let k=0;k<allPhotos.length;k++){
     const p = allPhotos[k];
@@ -929,11 +988,12 @@ async function exportDocx(){
 `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>
+<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable" Target="fontTable.xml"/>
 ${relEntries.join('\n')}
 </Relationships>`);
 
-  // === XML helpers ===
-  // Image inline drawing — namespaces declared at root
+  // === Image inline drawing (clean, no extra namespaces declared inline) ===
   function imgRun(p, widthEMU){
     const aspect = p._h / p._w;
     const cx = widthEMU;
@@ -942,71 +1002,71 @@ ${relEntries.join('\n')}
     return `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="${id}" name="Picture${id}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="${id}" name="image${id}"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rId${100+id-1}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
   }
 
-  // Label "box" — small bordered nested 1x1 table, right-aligned
-  function labelBox(text){
+  // === Label paragraph (NO nested table — uses paragraph border + right indent) ===
+  // The right-indent makes the bordered box appear narrow on the right side.
+  function labelParagraph(text, cellWidthDxa){
     const safe = escapeXml(text);
-    return `<w:tbl><w:tblPr><w:tblW w:w="900" w:type="dxa"/><w:jc w:val="right"/><w:tblBorders><w:top w:val="single" w:sz="6" w:color="000000"/><w:left w:val="single" w:sz="6" w:color="000000"/><w:bottom w:val="single" w:sz="6" w:color="000000"/><w:right w:val="single" w:sz="6" w:color="000000"/></w:tblBorders><w:tblCellMar><w:top w:w="40" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:bottom w:w="40" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="900"/></w:tblGrid><w:tr><w:tc><w:tcPr><w:tcW w:w="900" w:type="dxa"/></w:tcPr><w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="0"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="22"/></w:rPr><w:t xml:space="preserve">${safe}</w:t></w:r></w:p></w:tc></w:tr></w:tbl>`;
+    // Reserve ~800 dxa for the label, indent the rest from the left
+    const leftIndent = Math.max(cellWidthDxa - 900, 0);
+    return `<w:p><w:pPr><w:pBdr><w:top w:val="single" w:sz="6" w:space="1" w:color="000000"/><w:left w:val="single" w:sz="6" w:space="2" w:color="000000"/><w:bottom w:val="single" w:sz="6" w:space="1" w:color="000000"/><w:right w:val="single" w:sz="6" w:space="2" w:color="000000"/></w:pBdr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/><w:ind w:left="${leftIndent}" w:right="0"/><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:b/><w:sz w:val="20"/></w:rPr><w:t xml:space="preserve">${safe}</w:t></w:r></w:p>`;
   }
 
-  // Photo cell content (label box + photo)
-  function photoCellContent(block, photoWidthEMU){
-    const labelXml = labelBox(block.label);
-    // After nested table, MUST have a paragraph
-    const photoXml = block.photos.map(p =>
-      `<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="0"/></w:pPr>${imgRun(p, photoWidthEMU)}</w:p>`
-    ).join('');
-    return labelXml + photoXml;
+  // Empty paragraph (small)
+  const emptyPara = `<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr></w:p>`;
+  const smallGap = `<w:p><w:pPr><w:spacing w:before="80" w:after="80"/></w:pPr></w:p>`;
+
+  // Photo paragraph (centered)
+  function photoPara(p, widthEMU){
+    return `<w:p><w:pPr><w:spacing w:before="60" w:after="60"/><w:jc w:val="center"/></w:pPr>${imgRun(p, widthEMU)}</w:p>`;
   }
 
-  // Build each row XML
-  function renderPairRow(blockA, blockB){
-    const photoEMU = 2200000; // ~2.4"
-    const cellW = 4680;
-    const cellA = blockA
-      ? `<w:tc><w:tcPr><w:tcW w:w="${cellW}" w:type="dxa"/></w:tcPr>${photoCellContent(blockA, photoEMU)}</w:tc>`
-      : `<w:tc><w:tcPr><w:tcW w:w="${cellW}" w:type="dxa"/></w:tcPr><w:p/></w:tc>`;
-    const cellB = blockB
-      ? `<w:tc><w:tcPr><w:tcW w:w="${cellW}" w:type="dxa"/></w:tcPr>${photoCellContent(blockB, photoEMU)}</w:tc>`
-      : `<w:tc><w:tcPr><w:tcW w:w="${cellW}" w:type="dxa"/></w:tcPr><w:p/></w:tc>`;
-    return `<w:tbl><w:tblPr><w:tblW w:w="9360" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:jc w:val="center"/></w:tblPr><w:tblGrid><w:gridCol w:w="${cellW}"/><w:gridCol w:w="${cellW}"/></w:tblGrid><w:tr>${cellA}${cellB}</w:tr></w:tbl>`;
+  // === Build table rows ===
+  // Single outer table, 2 columns. Multi entries use gridSpan=2.
+  const cellW = 4680; // each column width
+  const tableW = cellW * 2;
+  const photoEMU_pair = 2400000;    // ~2.6" for paired single photos
+  const photoEMU_multi2 = 2700000;  // ~2.95" for multi 2 photos
+  const photoEMU_multi3 = 1800000;  // ~1.97" for multi 3 photos
+
+  function buildPairRow(blockA, blockB){
+    function cellContent(block){
+      if(!block) return emptyPara;
+      const photos = block.photos.map(p => photoPara(p, photoEMU_pair)).join('');
+      return labelParagraph(block.label, cellW) + photos;
+    }
+    return `<w:tr><w:trPr><w:cantSplit/></w:trPr><w:tc><w:tcPr><w:tcW w:w="${cellW}" w:type="dxa"/><w:tcMar><w:top w:w="60" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:bottom w:w="60" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tcMar></w:tcPr>${cellContent(blockA)}</w:tc><w:tc><w:tcPr><w:tcW w:w="${cellW}" w:type="dxa"/><w:tcMar><w:top w:w="60" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:bottom w:w="60" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tcMar></w:tcPr>${cellContent(blockB)}</w:tc></w:tr>`;
   }
 
-  function renderMultiRow(block){
+  function buildMultiRow(block){
     const N = block.photos.length;
-    let photoEMU;
-    if(N===2) photoEMU = 2700000;       // ~2.95"
-    else if(N===3) photoEMU = 1800000;  // ~1.97"
-    else photoEMU = Math.floor(8500000/N); // fallback
-    const tableW = 9360;
-    const cellW = Math.floor(tableW / N);
-    const innerCells = block.photos.map(p =>
-      `<w:tc><w:tcPr><w:tcW w:w="${cellW}" w:type="dxa"/></w:tcPr><w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="0"/></w:pPr>${imgRun(p, photoEMU)}</w:p></w:tc>`
-    ).join('');
-    const grid = block.photos.map(()=>`<w:gridCol w:w="${cellW}"/>`).join('');
-    // Outer wrapper: label on top spanning all photos, then row of photo cells
-    return `<w:tbl><w:tblPr><w:tblW w:w="${tableW}" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:jc w:val="center"/></w:tblPr><w:tblGrid>${grid}</w:tblGrid><w:tr><w:tc><w:tcPr><w:tcW w:w="${tableW}" w:type="dxa"/><w:gridSpan w:val="${N}"/></w:tcPr>${labelBox(block.label)}<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr></w:p></w:tc></w:tr><w:tr>${innerCells}</w:tr></w:tbl>`;
+    const photoEMU = N === 2 ? photoEMU_multi2 : (N === 3 ? photoEMU_multi3 : Math.floor(8500000/N));
+    // Multi photos go side-by-side in ONE paragraph (inline drawings, with small spacing run between)
+    const spacer = `<w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/></w:rPr><w:t xml:space="preserve">  </w:t></w:r>`;
+    const photosInline = block.photos.map((p,idx)=>{
+      return (idx>0 ? spacer : '') + imgRun(p, photoEMU).replace(/^<w:r>/, '<w:r>').replace(/<\/w:r>$/, '</w:r>');
+    }).join('');
+    const photoParagraph = `<w:p><w:pPr><w:spacing w:before="60" w:after="60"/><w:jc w:val="center"/></w:pPr>${photosInline}</w:p>`;
+    return `<w:tr><w:trPr><w:cantSplit/></w:trPr><w:tc><w:tcPr><w:tcW w:w="${tableW}" w:type="dxa"/><w:gridSpan w:val="2"/><w:tcMar><w:top w:w="60" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:bottom w:w="60" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tcMar></w:tcPr>${labelParagraph(block.label, tableW)}${photoParagraph}</w:tc></w:tr>`;
   }
 
-  // Compose rows
-  const bodyRows = rows.map(row=>{
-    if(row.type==='multi') return renderMultiRow(row.blocks[0]);
-    return renderPairRow(row.blocks[0], row.blocks[1]);
-  }).join('<w:p><w:pPr><w:spacing w:before="120" w:after="120"/></w:pPr></w:p>');
+  const tableRows = rows.map(row=>{
+    if(row.type==='multi') return buildMultiRow(row.blocks[0]);
+    return buildPairRow(row.blocks[0], row.blocks[1]);
+  }).join('');
 
+  const tableXml = `<w:tbl><w:tblPr><w:tblW w:w="${tableW}" w:type="dxa"/><w:jc w:val="center"/><w:tblLayout w:type="fixed"/><w:tblLook w:val="04A0" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/></w:tblPr><w:tblGrid><w:gridCol w:w="${cellW}"/><w:gridCol w:w="${cellW}"/></w:tblGrid>${tableRows}</w:tbl>`;
+
+  const titleXml = `<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="200"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:b/><w:sz w:val="32"/></w:rPr><w:t xml:space="preserve">NOTA ${escapeXml(monthLabelID(currentMonth).toUpperCase())}</w:t></w:r></w:p>`;
+
+  // === document.xml ===
+  // IMPORTANT: must have a final paragraph AFTER the table (required by spec).
   const docXml =
 `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
-<w:body>
-<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="32"/></w:rPr><w:t xml:space="preserve">NOTA ${escapeXml(monthLabelID(currentMonth).toUpperCase())}</w:t></w:r></w:p>
-<w:p/>
-${bodyRows}
-<w:p/>
-<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>
-</w:body>
-</w:document>`;
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="w14"><w:body>${titleXml}${tableXml}${emptyPara}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1080" w:right="1080" w:bottom="1080" w:left="1080" w:header="720" w:footer="720" w:gutter="0"/><w:cols w:space="720"/><w:docGrid w:linePitch="360"/></w:sectPr></w:body></w:document>`;
+
   zip.file('word/document.xml', docXml);
 
-  const blob = await zip.generateAsync({type:'blob'});
+  const blob = await zip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
   downloadBlob(blob, `Nota_${monthLabelID(currentMonth).replace(/\s+/g,'_')}.docx`);
   toast('Word di-download','ok');
 }
