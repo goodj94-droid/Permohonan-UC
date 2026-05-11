@@ -659,6 +659,7 @@ function compressImage(file){
 
 // =============== EXPORT EXCEL (ExcelJS) ===============
 async function exportExcel(){
+  try {
   const ents = getEntriesForMonth(currentMonth);
   if(ents.length===0){toast('Tidak ada entry bulan ini','err');return}
   toast('Membuat Excel...','ok');
@@ -701,13 +702,13 @@ async function exportExcel(){
 
   let r = 1;
 
-  // Title (merged A1:D1)
+  // Title (merged A1:D1) — NO border, just bold centered text
   ws.mergeCells(`A${r}:D${r}`);
-  styleCell(`A${r}`, {value:'PERMOHONAN PEMBAYARAN', bold:true, center:true, border:true, size:11});
+  styleCell(`A${r}`, {value:'PERMOHONAN PEMBAYARAN', bold:true, center:true, size:11});
   ws.getRow(r).height = 22;
   r++;
 
-  // Rows 2-4: a/b/c options
+  // Rows 2-4: a/b/c options — column C+D merged (no vertical separator)
   const opts = [
     ['a','Pengajuan DANA ADVANCE'],
     ['b','Penyelesaian dana ADVANCE yang diterima'],
@@ -716,8 +717,11 @@ async function exportExcel(){
   opts.forEach(([letter, text])=>{
     styleCell(`A${r}`, {value:letter, center:true, border:true});
     styleCell(`B${r}`, {value:text, left:true, border:true});
+    // Apply border to both C and D BEFORE merging
     styleCell(`C${r}`, {border:true});
     styleCell(`D${r}`, {border:true});
+    // Then merge — ExcelJS keeps borders from both cells of the merge range
+    try { ws.mergeCells(`C${r}:D${r}`); } catch(e) { console.warn('merge failed:', e); }
     r++;
   });
 
@@ -844,6 +848,10 @@ async function exportExcel(){
   const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   downloadBlob(blob, `Permohonan_${monthLabelID(currentMonth).replace(/\s+/g,'_')}.xlsx`);
   toast('Excel di-download','ok');
+  } catch(err) {
+    console.error('exportExcel error:', err);
+    toast('Excel error: '+err.message, 'err');
+  }
 }
 
 // =============== EXPORT WORD ===============
