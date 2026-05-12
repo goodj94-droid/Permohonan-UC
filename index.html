@@ -153,6 +153,15 @@
             <label>Lokasi/Kantor</label>
             <input type="text" id="metaLokasi" placeholder="Solo">
           </div>
+          <div>
+            <label>Jabatan (untuk allowance menginap)</label>
+            <select id="metaJabatan">
+              <option value="300000">Sales & Teknisi — Rp 300.000/malam</option>
+              <option value="350000">Supervisor — Rp 350.000/malam</option>
+              <option value="400000">Asisten Manager — Rp 400.000/malam</option>
+              <option value="500000">Manager — Rp 500.000/malam</option>
+            </select>
+          </div>
         </div>
       </div>
     </details>
@@ -263,7 +272,7 @@ function defaultState(){
   const today = new Date();
   const mk = today.toISOString().substring(0,7);
   return {
-    meta:{nama:'',lokasi:'Solo'},
+    meta:{nama:'',lokasi:'Solo',jabatanAllowance:300000},
     pengajuanPerBulan:{[mk]:3000000},
     entries:[]
   };
@@ -331,7 +340,8 @@ function getMalam(entry){
   return Math.max(1,diffDays(entry.tanggalMulai,entry.tanggalSelesai));
 }
 function getAllowance(entry){
-  return entry.tipe==='harian' ? 125000 : getMalam(entry)*300000;
+  const allowanceMalam = +(state.meta.jabatanAllowance) || 300000;
+  return entry.tipe==='harian' ? 125000 : getMalam(entry)*allowanceMalam;
 }
 function entryTotal(entry){
   return getAllowance(entry) + (entry.biayaLain||[]).reduce((s,b)=>s+(+b.jumlah||0),0);
@@ -388,6 +398,7 @@ function renderAll(){
   document.getElementById('metaPengajuan').value = state.pengajuanPerBulan[currentMonth] ?? 3000000;
   document.getElementById('metaNama').value = state.meta.nama || '';
   document.getElementById('metaLokasi').value = state.meta.lokasi || '';
+  document.getElementById('metaJabatan').value = state.meta.jabatanAllowance || 300000;
 
   const ents = getEntriesForMonth(currentMonth);
   const peng = +(state.pengajuanPerBulan[currentMonth]||0);
@@ -448,6 +459,7 @@ document.getElementById('metaPengajuan').addEventListener('input',e=>{
 });
 document.getElementById('metaNama').addEventListener('input',e=>{state.meta.nama=e.target.value;scheduleSave()});
 document.getElementById('metaLokasi').addEventListener('input',e=>{state.meta.lokasi=e.target.value;scheduleSave()});
+document.getElementById('metaJabatan').addEventListener('change',e=>{state.meta.jabatanAllowance=+e.target.value;scheduleSave();renderApp()});
 
 // =============== ENTRY MODAL ===============
 function openEntryModal(id){
@@ -529,7 +541,8 @@ function updateAllowance(){
     cb.innerHTML = `Allowance: <b>Rp ${rp(alw)}</b> (pulang hari) • Total entry: <b>Rp ${rp(tot)}</b>`;
   }else{
     const malam = getMalam(editingEntry);
-    cb.innerHTML = `Allowance: <b>Rp ${rp(alw)}</b> (${malam} malam × Rp 300.000) • Total entry: <b>Rp ${rp(tot)}</b>`;
+    const perMalam = +(state.meta.jabatanAllowance) || 300000;
+    cb.innerHTML = `Allowance: <b>Rp ${rp(alw)}</b> (${malam} malam × Rp ${rp(perMalam)}) • Total entry: <b>Rp ${rp(tot)}</b>`;
   }
 }
 
@@ -824,6 +837,7 @@ async function exportExcel(){
     ['Perjalanan tidak menginap','Rp. 125.000/hari'],
     ['Perjalanan menginap utk Sales & Teknisi','Rp. 300.000/hari'],
     ['Perjalanan menginap utk Supervisor','Rp. 350.000/hari'],
+    ['Perjalanan menginap utk Asisten Manager','Rp. 400.000/hari'],
     ['Perjalanan menginap utk Manager','Rp. 500.000/hari']
   ];
   footer.forEach(([a,c])=>{
