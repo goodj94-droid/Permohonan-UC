@@ -1,56 +1,52 @@
-// Service Worker untuk Permohonan App — offline support
-const CACHE_NAME = 'permohonan-v6';
-const STATIC_ASSETS = [
-  './',
-  './index.html',
-  './manifest.json',
-  './icon-192.png',
-  './icon-512.png',
-  'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
-];
+// Service worker: selalu ambil versi terbaru saat online, pakai cache saat offline.
+const SCOPE = self.registration.scope;
+const CACHE = 'net-v1:' + SCOPE;
 
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS).catch(err => {
-        // jangan gagal install kalau CDN ke-block — yang penting index ke-cache
-        console.log('Some assets failed to cache:', err);
-      });
-    })
+self.addEventListener('install', () => self.skipWaiting());
+
+self.addEventListener('activate', (e) => {
+  e.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(keys
+        .filter((k) => k.startsWith('net-') && k.endsWith(SCOPE) && k !== CACHE)
+        .map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
-  self.skipWaiting();
 });
 
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
-      );
-    })
-  );
-  self.clients.claim();
-});
+async function fromCache(req) {
+  const hit = await caches.match(req, { ignoreSearch: true });
+  if (hit) return hit;
+  if (req.mode === 'navigate') {
+    return (await caches.match(SCOPE)) || (await caches.match(SCOPE + 'index.html')) || null;
+  }
+  return null;
+}
 
-self.addEventListener('fetch', (event) => {
-  // strategi: cache-first untuk static, network-first kalau cache miss
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request).then((response) => {
-        // cache hasil GET sukses
-        if (event.request.method === 'GET' && response.status === 200) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-        }
-        return response;
-      }).catch(() => {
-        // offline fallback ke index untuk navigasi
-        if (event.request.mode === 'navigate') {
-          return caches.match('./index.html');
-        }
-      });
-    })
-  );
+self.addEventListener('fetch', (e) => {
+  const req = e.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  const mine = req.url.startsWith(SCOPE);
+  if (!mine && url.hostname !== 'cdnjs.cloudflare.com') return;
+
+  e.respondWith((async () => {
+    const net = fetch(req).then((res) => {
+      if (res.ok) {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(req, copy));
+      }
+      return res;
+    });
+    net.catch(() => {});
+    try {
+      const res = await Promise.race([net, new Promise((r) => setTimeout(r, 5000, null))]);
+      if (res) return res;
+      const hit = await fromCache(req);
+      return hit || await net;
+    } catch (err) {
+      const hit = await fromCache(req);
+      return hit || Response.error();
+    }
+  })());
 });
