@@ -1179,5 +1179,14 @@ if('serviceWorker' in navigator){
 loadStore();
 renderAll();
 </script>
+ <script>
+window.DRIVE_BACKUP = {
+  app: "PermohonanUC",
+  label: "Permohonan UC",
+  keys: ["permohonan_pembayaran_v2"],
+  isEmpty: function (d) { return !d || !(d.entries || []).length; }
+};
+</script>
+<script src="drive-backup.js?v=1"></script>
 </body>
 </html>
